@@ -11,6 +11,7 @@ import { ServerSetupParams } from './setupParams';
 import { fsExists } from './util/fsUtils';
 import { LOG } from './util/logger';
 import { Status, StatusBarEntry } from './util/status';
+import { KotlinTestDiscovery } from './testDiscovery';
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -20,6 +21,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     const kotlinConfig = vscode.workspace.getConfiguration("kotlin");
     let langServerEnabled = kotlinConfig.get("languageServer.enabled");
     let debugAdapterEnabled = kotlinConfig.get("debugAdapter.enabled");
+    let testDiscoveryEnabled = kotlinConfig.get("testDiscovery.enabled") ?? true;
     
     const globalStoragePath = context.globalStorageUri.fsPath;
     if (!(await fsExists(globalStoragePath))) {
@@ -68,10 +70,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     });
 
     let extensionApi = new ExtensionApi();
+    let testDiscovery: KotlinTestDiscovery | undefined;
     
     if (langServerEnabled) {
         initTasks.push(withSpinningStatus(context, async status => {
             extensionApi.kotlinApi = await activateLanguageServer(setupParams(status));
+
+            // Putting test discovery in here with LSP initialization. In the future,
+            // hope to have test discovery more integrated with LSP server rather than
+            // doing client-side parsing.
+            if (testDiscoveryEnabled) {
+                testDiscovery = new KotlinTestDiscovery(context);
+                extensionApi.testDiscovery = testDiscovery;
+            }
         }));
     } else {
         LOG.info("Skipping language server activation since 'kotlin.languageServer.enabled' is false");
@@ -86,6 +97,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     }
     
     await Promise.all(initTasks);
+
+    if (testDiscoveryEnabled) {
+        context.subscriptions.push(
+            vscode.commands.registerCommand('kotlin.test.run', async (testMethod: string, testClass: string) => {
+                const terminal = vscode.window.createTerminal('Kotlin Test');
+                terminal.show();
+
+                if (!vscode.workspace.workspaceFolders) return;
+
+                const workspaceRoot = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath)
+                const hasGradleFile = await fsExists(path.join(workspaceRoot, "build.gradle")) || await fsExists(path.join(workspaceRoot, "build.gradle.kts"))
+
+                terminal.show();
+
+                if (hasGradleFile) {
+                    terminal.sendText(`./gradlew test --tests ${testClass}${testMethod ? `.${testMethod}` : ''}`)
+                } else {
+                    // TODO: Support Maven and other build systems
+                    throw new Error("Error running tests: Only Gradle workspaces are supported for now!")
+                }
+            })
+        )
+    }
 
     return extensionApi;
 }
@@ -102,6 +136,7 @@ export function deactivate(): void {}
 
 class ExtensionApi {
     kotlinApi?: KotlinApi;
+    testDiscovery?: KotlinTestDiscovery;
 
     async getBuildOutputPath(): Promise<string> {
         return await this.kotlinApi?.getBuildOutputLocation();
