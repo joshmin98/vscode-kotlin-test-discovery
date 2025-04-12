@@ -1,4 +1,6 @@
-# Kotlin IDE for Visual Studio Code
+
+# A fork of Kotlin IDE for Visual Studio Code
+> This is a test fork that I've been working on to try and get better test integration with VSCode for Kotlin. In it's current state this fork allows for test class methods to be shown in the VSCode test explorer UI, and for you to run specific tests from the UI. All of the processing/logic is held within the extension, which I don't think is ideal. It would be better if some functionality (e.g. test recognition) would be offloaded to the LSP itself.
 
 [![Version](https://raster.shields.io/visual-studio-marketplace/v/fwcd.kotlin)](https://marketplace.visualstudio.com/items?itemName=fwcd.kotlin)
 [![Build](https://raster.shields.io/github/actions/workflow/status/fwcd/vscode-kotlin/build.yml?branch=main)](https://github.com/fwcd/vscode-kotlin/actions/workflows/build.yml)
